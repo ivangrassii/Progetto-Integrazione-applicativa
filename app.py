@@ -1,6 +1,6 @@
 import re
 from flask import Flask, render_template, request, redirect, url_for
-from wiki_client import WikiAgent
+from services.wiki_client import WikiAgent
 from services.spotify import SpotifyHandler
 
 app = Flask(__name__)
