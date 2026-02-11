@@ -1,70 +1,40 @@
 import re
 from flask import Flask, render_template, request, redirect, url_for
 from wiki_client import WikiAgent
-import spotipy
-from spotipy.oauth2 import SpotifyClientCredentials
+from services.spotify import SpotifyHandler
 
 app = Flask(__name__)
 agent = WikiAgent()
 
-# --- CONFIGURAZIONE SPOTIFY API ---
-SPOTIPY_CLIENT_ID = 'INSERISCI_QUI_IL_TUO_CLIENT_ID'
-SPOTIPY_CLIENT_SECRET = 'INSERISCI_QUI_IL_TUO_CLIENT_SECRET'
-
-try:
-    auth_manager = SpotifyClientCredentials(client_id=SPOTIPY_CLIENT_ID, client_secret=SPOTIPY_CLIENT_SECRET)
-    sp = spotipy.Spotify(auth_manager=auth_manager)
-except Exception:
-    sp = None
+sp_handler = SpotifyHandler(client_id="97d33694cfc244108d9fdf068f419317", client_secret="cd7077144fe54cec9a12fd72d7481c48")
 
 @app.route('/')
 def home():
     return render_template('index.html', error=None)
 
-@app.route('/load-playlist', methods=['POST'])
+@app.route('/playlist', methods=['POST'])
 def load():
+    # 1. Recupero il link dal form
     playlist_url = request.form.get('playlist_url', '').strip()
     
-    # 1. VALIDAZIONE DEL LINK (Se fallisce -> Torna alla Home con Errore)
-    spotify_pattern = re.compile(r"^https?://open\.spotify\.com/playlist/([a-zA-Z0-9]+)")
-    match = spotify_pattern.match(playlist_url)
+    # 2. Estraggo l'ID (o uso un ID finto se il link è vuoto/sbagliato)
+    pid = sp_handler.extract_id_from_url(playlist_url)
     
-    if not match:
-        return render_template('index.html', error="Errore: Il link inserito non è valido. Formato richiesto: https://open.spotify.com/playlist/...")
+    # 3. Recupero le tracce (reali o demo)
+    tracks, is_demo = sp_handler.get_playlist_tracks(pid)
 
-    playlist_id = match.group(1)
-    current_playlist = []
+    # 4. Renderizzo la pagina playlist.html passando i dati
+    return render_template('playlist.html', tracks=tracks, pid=pid, demo=is_demo)
 
-    # 2. CHIAMATA REALE ALLE API DI SPOTIFY
-    try:
-        if not sp:
-            raise Exception("Credenziali Spotify non configurate.")
-            
-        results = sp.playlist_items(playlist_id)
-        
-        for item in results.get('items', []):
-            track = item.get('track')
-            if track:
-                current_playlist.append({
-                    "title": track['name'],
-                    "artist": track['artists'][0]['name'],
-                    "album": track['album']['name']
-                })
-                
-        # SUCCESSO: Mostriamo la playlist reale
-        return render_template('playlist.html', playlist=current_playlist, playlist_id=playlist_id, trial_mode=False)
-
-    except Exception as e:
-        # 3. FALLIMENTO API -> MODALITÀ DI PROVA (Nessun redirect alla pagina nera!)
-        print(f"API Fallita, avvio Modalità di Prova: {e}")
-        
-        trial_playlist = [
-            {"title": "Move (Modalità di Prova)", "artist": "Adam Port", "album": "Move"},
-            {"title": "FINCHÉ NON ARRIVA LA BELLA VITA", "artist": "Artie 5ive", "album": "FINCHÉ NON ARRIVA..."},
-            {"title": "No Me Conoce - Remix", "artist": "Jhayco", "album": "FAMOUZ"}
-        ]
-        
-        return render_template('playlist.html', playlist=trial_playlist, playlist_id=playlist_id, trial_mode=True)
+@app.route('/track')
+def track_detail():
+    # Recuperiamo i dati passati dal link (senza interrogare API complesse)
+    title = request.args.get('title')
+    artist = request.args.get('artist')
+    album = request.args.get('album')
+    
+    # Qui renderizziamo la pagina intermedia
+    return render_template('track.html', title=title, artist=artist, album=album)
 
 @app.route('/artist/<name>')
 def artist_detail(name):

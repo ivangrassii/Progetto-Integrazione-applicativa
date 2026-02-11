@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <title>Dettagli Canzone</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-dark text-white text-center d-flex align-items-center" style="height: 100vh;">
+    
+    <div class="container">
+        <div class="card bg-secondary text-white mx-auto shadow-lg p-4" style="max-width: 600px;">
+            <div class="card-body">
+                <h5 class="text-uppercase text-warning mb-3">Scheda Brano</h5>
+                
+                <h1 class="display-4 fw-bold">{{ title }}</h1>
+                <h3 class="text-light fw-light mb-4">{{ album }}</h3>
+                
+                <hr class="border-light my-4">
+
+                <p class="lead">Per scoprire le connessioni semantiche (luoghi, date, premi), analizza l'autore nel Knowledge Graph:</p>
+                
+                <a href="/artist/{{ artist }}" class="btn btn-success btn-lg w-100 py-3 fw-bold shadow">
+                    🌍 Analizza {{ artist }} su Wikidata
+                </a>
+
+                <br><br>
+                <a href="javascript:history.back()" class="text-white-50 text-decoration-none">← Torna alla playlist</a>
+            </div>
+        </div>
+    </div>
+
+</body>
+</html>
