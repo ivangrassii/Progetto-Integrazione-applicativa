@@ -2,110 +2,160 @@ import requests
 
 class WikiAgent:
     def __init__(self):
+        # Endpoint ufficiale per le query SPARQL di Wikidata
         self.url = "https://query.wikidata.org/sparql"
+        # User-Agent è obbligatorio per evitare blocchi dalle API di Wikidata
         self.headers = {
-            'User-Agent': 'IMKB-APP/7.0',
+            'User-Agent': 'MusicDataBot/1.0 (https://example.com; contact@example.com)',
             'Accept': 'application/sparql-results+json'
         }
 
-    def get_artist_data(self, artist_name):
-        query = f"""
-        SELECT ?item ?itemLabel ?description ?genreLabel ?placeLabel ?coords WHERE {{
-          ?item rdfs:label "{artist_name}"@it.
-          ?item wdt:P31 ?type.
-          FILTER (?type IN (wd:Q215380, wd:Q5)). 
-          OPTIONAL {{ ?item schema:description ?description. FILTER(lang(?description) = "it") }}
-          OPTIONAL {{ ?item wdt:P136 ?genre. ?genre rdfs:label ?genreLabel. FILTER(lang(?genreLabel) = "it") }}
-          OPTIONAL {{ 
-            ?item wdt:P19 ?place. 
-            ?place wdt:P625 ?coords. 
-            ?place rdfs:label ?placeLabel. FILTER(lang(?placeLabel) = "it") 
-          }}
-          SERVICE wikibase:label {{ bd:serviceParam wikibase:language "it". }}
-        }} LIMIT 1
-        """
-        try:
-            r = requests.get(self.url, params={'query': query, 'format': 'json'}, headers=self.headers)
-            r.raise_for_status()
-            data = r.json()
-            results = data['results']['bindings']
-            return results[0] if results else None
-        except Exception as e:
-            print(f"Errore SPARQL Artista: {e}")
-            return None
-
     def get_track_url(self, title, artist):
-        
-        # Pulizia nomi per la query
+        """
+        Fase 1: Trova l'URL Wikidata della canzone usando il servizio mwapi (EntitySearch).
+        Questo metodo evita il timeout e risolve i problemi di etichette multilingua.
+        """
+        # Pulizia per evitare che le virgolette rompano la sintassi SPARQL
         clean_title = title.replace('"', '').replace("'", "")
         clean_artist = artist.replace('"', '').replace("'", "")
         
         query = f"""
         SELECT DISTINCT ?canzone WHERE {{
-          # Usa 'clean_title' perché 'track_name' non è definita
-          ?canzone rdfs:label "{clean_title}"@it. 
+          # Cerca l'artista tramite motore di ricerca interno
+          SERVICE wikibase:mwapi {{
+              bd:serviceParam wikibase:api "EntitySearch" .
+              bd:serviceParam wikibase:endpoint "www.wikidata.org" .
+              bd:serviceParam mwapi:search "{clean_artist}" .
+              bd:serviceParam mwapi:language "it" .
+              ?artista wikibase:apiOutputItem mwapi:item .
+          }}
           
-          # Usa 'clean_artist'
-          ?canzone wdt:P175 ?artista.
-          ?artista rdfs:label "{clean_artist}"@it.
+          # Cerca la canzone tramite motore di ricerca interno
+          SERVICE wikibase:mwapi {{
+              bd:serviceParam wikibase:api "EntitySearch" .
+              bd:serviceParam wikibase:endpoint "www.wikidata.org" .
+              bd:serviceParam mwapi:search "{clean_title}" .
+              bd:serviceParam mwapi:language "it" .
+              ?canzone wikibase:apiOutputItem mwapi:item .
+          }}
 
-          # Filtro per opere musicali o sottoclassi
-          ?canzone wdt:P31/wdt:P279* wd:Q2188189. 
+          # Verifica che la canzone sia effettivamente collegata all'artista
+          ?canzone wdt:P175 ?artista .
+          
+          # Verifica che sia un'opera musicale o sottoclasse (es. canzone, singolo)
+          ?canzone wdt:P31/wdt:P279* wd:Q2188189 . 
         }} LIMIT 1
         """
         try:
+            # Effettua la richiesta al server Wikidata
             r = requests.get(self.url, params={'query': query, 'format': 'json'}, headers=self.headers)
             r.raise_for_status()
             data = r.json()
+            
             results = data.get('results', {}).get('bindings', [])
-            return results[0]['canzone']['value'] if results else None
+            
+            # Se troviamo un risultato, restituiamo l'URL dell'entità
+            if results:
+                return results[0]['canzone']['value']
+            
+            # Se non trova nulla, restituiamo None
+            return None
+            
         except Exception as e:
-            print(f"Errore SPARQL: {e}")
+            print(f"Errore nel recupero URL tramite mwapi: {e}")
             return None
 
-    def get_entity_details(self, entity_url):
+    def get_track_details(self, entity_url):
         query = f"""
         SELECT ?canzoneLabel 
                (MAX(?immagine) AS ?img) 
                (MAX(?dataPubblicazione) AS ?data) 
                (GROUP_CONCAT(DISTINCT ?genereLabel; separator="|") AS ?generi) 
                (GROUP_CONCAT(DISTINCT ?produttoreLabel; separator="|") AS ?produttori) 
-               (GROUP_CONCAT(DISTINCT ?premioLabel; separator="|") AS ?premi) 
-               (GROUP_CONCAT(DISTINCT ?artistaLabel; separator="|") AS ?artisti)
+               (GROUP_CONCAT(DISTINCT ?premioLabel; separator="|") AS ?premi)
+               (GROUP_CONCAT(DISTINCT ?artistaInfo; separator="||") AS ?artisti)
         WHERE {{
           BIND(<{entity_url}> AS ?canzone)
-          OPTIONAL {{ ?canzone rdfs:label ?canzoneLabel . FILTER(lang(?canzoneLabel)="it" || lang(?canzoneLabel)="en") }}
+          
+          # Label della canzone con priorità IT > EN
+          OPTIONAL {{
+            ?canzone rdfs:label ?labelIT . FILTER(lang(?labelIT) = "it")
+          }}
+          OPTIONAL {{
+            ?canzone rdfs:label ?labelEN . FILTER(lang(?labelEN) = "en")
+          }}
+          BIND(COALESCE(?labelIT, ?labelEN, "Sconosciuto") AS ?canzoneLabel)
+
           OPTIONAL {{ ?canzone wdt:P18 ?immagine . }}
           OPTIONAL {{ ?canzone wdt:P577|wdt:P571 ?dataPubblicazione . }}
-          OPTIONAL {{ ?canzone wdt:P136 ?g . ?g rdfs:label ?genereLabel . FILTER(lang(?genereLabel)="it" || lang(?genereLabel)="en") }}
-          OPTIONAL {{ ?canzone wdt:P162 ?p . ?p rdfs:label ?produttoreLabel . FILTER(lang(?produttoreLabel)="it" || lang(?produttoreLabel)="en") }}
-          OPTIONAL {{ ?canzone wdt:P166 ?pr . ?pr rdfs:label ?premioLabel . FILTER(lang(?premioLabel)="it" || lang(?premioLabel)="en") }}
-          OPTIONAL {{ ?canzone wdt:P175 ?a . ?a rdfs:label ?artistaLabel . FILTER(lang(?artistaLabel)="it" || lang(?artistaLabel)="en") }}
+
+          # Generi: Cerchiamo IT, se manca usiamo EN
+          OPTIONAL {{ 
+            ?canzone wdt:P136 ?g . 
+            OPTIONAL {{ ?g rdfs:label ?gIT . FILTER(lang(?gIT) = "it") }}
+            OPTIONAL {{ ?g rdfs:label ?gEN . FILTER(lang(?gEN) = "en") }}
+            BIND(COALESCE(?gIT, ?gEN) AS ?genereLabel)
+          }}
+
+          # Produttori: Cerchiamo IT, se manca usiamo EN
+          OPTIONAL {{ 
+            ?canzone wdt:P162 ?p . 
+            OPTIONAL {{ ?p rdfs:label ?pIT . FILTER(lang(?pIT) = "it") }}
+            OPTIONAL {{ ?p rdfs:label ?pEN . FILTER(lang(?pEN) = "en") }}
+            BIND(COALESCE(?pIT, ?pEN) AS ?produttoreLabel)
+          }}
+
+          # Premi: Cerchiamo IT, se manca usiamo EN
+          OPTIONAL {{ 
+            ?canzone wdt:P166 ?pr . 
+            OPTIONAL {{ ?pr rdfs:label ?prIT . FILTER(lang(?prIT) = "it") }}
+            OPTIONAL {{ ?pr rdfs:label ?prEN . FILTER(lang(?prEN) = "en") }}
+            BIND(COALESCE(?prIT, ?prEN) AS ?premioLabel)
+          }}
+          
+          # Artisti: Cerchiamo IT, se manca usiamo EN
+          OPTIONAL {{ 
+            ?canzone wdt:P175 ?a . 
+            OPTIONAL {{ ?a rdfs:label ?aIT . FILTER(lang(?aIT) = "it") }}
+            OPTIONAL {{ ?a rdfs:label ?aEN . FILTER(lang(?aEN) = "en") }}
+            BIND(COALESCE(?aIT, ?aEN) AS ?aLabel)
+            BIND(CONCAT(STR(?aLabel), ">", STR(?a)) AS ?artistaInfo)
+          }}
         }}
         GROUP BY ?canzoneLabel
         """
         try:
-            r = requests.get(self.url, params={'query': query}, headers=self.headers)
+            r = requests.get(self.url, params={'query': query, 'format': 'json'}, headers=self.headers)
             r.raise_for_status()
             results = r.json().get('results', {}).get('bindings', [])
             
             if results:
                 res = results[0]
-                img_url = res.get('img', {}).get('value')
-                artisti_str = res.get('artisti', {}).get('value', '')
-                collaborators_list = artisti_str.split('|') if artisti_str else []
+                artisti_raw = res.get('artisti', {}).get('value', '').split('||')
+                lista_artisti = []
+                # Set per evitare duplicati di URL artista (stessa persona con label IT ed EN)
+                seen_artists = set()
+                
+                for item in artisti_raw:
+                    if '>' in item:
+                        nome, url = item.split('>')
+                        if url not in seen_artists:
+                            lista_artisti.append({'name': nome, 'url': url})
+                            seen_artists.add(url)
 
                 return {
                     'found': True,
                     'wikidata_url': entity_url,
-                    'official_title': res.get('canzoneLabel', {}).get('value', 'Sconosciuto'),
-                    'image': img_url if img_url else None, # Se non c'è, torna None
-                    'genre': res.get('generi', {}).get('value', '').replace('|', ', ') or 'Non specificato',
-                    'producer': res.get('produttori', {}).get('value', '').replace('|', ', ') or 'Non specificato',
-                    'awards': res.get('premi', {}).get('value', '').replace('|', ', ') or 'Nessun premio registrato',
-                    'date': res.get('data', {}).get('value', '').split('T')[0] if 'data' in res else 'Non specificata',
-                    'collaborators': collaborators_list
+                    'title': res.get('canzoneLabel', {}).get('value', 'Sconosciuto'),
+                    'image': res.get('img', {}).get('value'),
+                    'date': res.get('data', {}).get('value', '').split('T')[0] if 'data' in res else 'N/D',
+                    'genres': res.get('generi', {}).get('value', '').replace('|', ', ') or 'N/D',
+                    'producers': res.get('produttori', {}).get('value', '').replace('|', ', ') or 'N/D',
+                    'awards': res.get('premi', {}).get('value', '').replace('|', ', ') or 'Nessuno',
+                    'artisti_list': lista_artisti
                 }
-            return {'found': False, 'image': None, 'collaborators': []}
+            return {'found': False}
         except Exception as e:
-            return {'found': False, 'image': None, 'collaborators': []}
+            print(f"Errore: {e}")
+            return {'found': False}
+
