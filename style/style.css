@@ -1,0 +1,191 @@
+/* --- RESET & VARIABILI --- */
+:root {
+    --spotify-green: #1DB954;
+    --spotify-black: #191414;
+    --spotify-dark-gray: #121212;
+    --spotify-light-gray: #282828;
+    --text-white: #FFFFFF;
+    --text-muted: #B3B3B3;
+    --glass-bg: rgba(255, 255, 255, 0.07);
+    --glass-border: rgba(255, 255, 255, 0.1);
+    --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5);
+}
+
+body {
+    background-color: var(--spotify-black);
+    color: var(--text-white);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    min-height: 100vh;
+    margin: 0;
+    padding: 0;
+    /* Per evitare scroll orizzontali su mobile */
+    overflow-x: hidden; 
+}
+
+a { text-decoration: none; color: inherit; transition: 0.3s; }
+ul { list-style: none; padding: 0; }
+
+/* --- BACKGROUND DINAMICO --- */
+.bg-backdrop {
+    position: fixed;
+    top: 0; left: 0; width: 100%; height: 100%;
+    z-index: -1;
+    background-size: cover;
+    background-position: center;
+    filter: blur(60px) brightness(0.4);
+    transform: scale(1.1); /* Evita bordi bianchi dal blur */
+}
+
+/* --- LAYOUT & CONTAINER --- */
+.app-container {
+    max-width: 1000px;
+    margin: 60px auto;
+    padding: 40px;
+    background: var(--glass-bg);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid var(--glass-border);
+    border-radius: 24px;
+    box-shadow: var(--glass-shadow);
+    animation: fadeIn 0.6s ease-out;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* --- TIPOGRAFIA --- */
+.title-hero {
+    font-size: 3.5rem;
+    font-weight: 800;
+    letter-spacing: -1.5px;
+    line-height: 1.1;
+    margin-bottom: 10px;
+}
+
+.title-section {
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    font-weight: 700;
+    color: var(--spotify-green);
+    margin-bottom: 15px;
+    display: block;
+}
+
+.text-secondary { color: var(--text-muted) !important; }
+
+/* --- COMPONENTI --- */
+
+/* Immagini Cover */
+.cover-art {
+    width: 280px;
+    height: 280px;
+    object-fit: cover;
+    border-radius: 12px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+    border: 1px solid var(--glass-border);
+    transition: transform 0.3s ease;
+}
+
+.cover-art:hover { transform: scale(1.02); }
+
+/* Card Dati (Generi, Date, ecc) */
+.info-card {
+    background: rgba(255,255,255,0.03);
+    padding: 20px;
+    border-radius: 16px;
+    border: 1px solid transparent;
+    transition: 0.3s;
+    height: 100%;
+}
+
+.info-card:hover {
+    background: rgba(255,255,255,0.08);
+    border-color: var(--glass-border);
+}
+
+.info-value {
+    font-size: 1.2rem;
+    font-weight: 600;
+}
+
+/* Pillole (Generi) */
+.pill {
+    display: inline-block;
+    padding: 6px 16px;
+    background: var(--spotify-green);
+    color: #000;
+    border-radius: 50px;
+    font-weight: 700;
+    font-size: 0.85rem;
+    margin: 0 6px 6px 0;
+}
+
+/* Input Form */
+.input-glass {
+    width: 100%;
+    padding: 16px 24px;
+    border-radius: 50px;
+    border: 2px solid var(--glass-border);
+    background: rgba(0,0,0,0.3);
+    color: white;
+    font-size: 1.1rem;
+    outline: none;
+    transition: 0.3s;
+}
+
+.input-glass:focus {
+    border-color: var(--spotify-green);
+    background: rgba(0,0,0,0.6);
+    box-shadow: 0 0 0 4px rgba(29, 185, 84, 0.2);
+}
+
+/* Bottoni */
+.btn-primary-custom {
+    background: var(--spotify-green);
+    color: black;
+    font-weight: 800;
+    border-radius: 50px;
+    padding: 14px 30px;
+    border: none;
+    transition: 0.3s;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.btn-primary-custom:hover {
+    background: #1ed760;
+    transform: scale(1.05);
+    box-shadow: 0 10px 20px rgba(29, 185, 84, 0.3);
+}
+
+.btn-back {
+    display: inline-flex;
+    align-items: center;
+    color: var(--text-muted);
+    font-weight: 600;
+    margin-bottom: 20px;
+}
+.btn-back:hover { color: white; transform: translateX(-5px); }
+
+/* Card Artista Cliccabile */
+.artist-tile {
+    display: block;
+    background: rgba(255,255,255,0.03);
+    padding: 25px;
+    border-radius: 16px;
+    text-align: center;
+    border: 1px solid transparent;
+    transition: all 0.3s;
+}
+
+.artist-tile:hover {
+    background: rgba(255,255,255,0.1);
+    transform: translateY(-5px);
+    border-color: var(--spotify-green);
+}
+
+.artist-tile i { font-size: 3rem; margin-bottom: 15px; color: var(--text-muted); }
+.artist-tile:hover i { color: var(--text-white); }

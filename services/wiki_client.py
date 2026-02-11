@@ -66,63 +66,155 @@ class WikiAgent:
             return None
 
     def get_track_details(self, entity_url):
+        """
+        Estrae i dettagli gestendo correttamente MULTIPLI artisti.
+        Usa una logica di 'impacchettamento' stringa direttamente in SPARQL.
+        """
+        # 1. Preparazione URL per SPARQL (aggiunge < > se mancano)
+        if not entity_url.startswith('<'):
+            entity_url = f"<{entity_url}>"
+
+        # 2. La Query (Nota la correzione su BIND)
         query = f"""
-        SELECT ?canzoneLabel 
-               (MAX(?immagine) AS ?img) 
-               (MAX(?dataPubblicazione) AS ?data) 
-               (GROUP_CONCAT(DISTINCT ?genereLabel; separator="|") AS ?generi) 
-               (GROUP_CONCAT(DISTINCT ?produttoreLabel; separator="|") AS ?produttori) 
-               (GROUP_CONCAT(DISTINCT ?premioLabel; separator="|") AS ?premi)
-               (GROUP_CONCAT(DISTINCT ?artistaInfo; separator="||") AS ?artisti)
+        SELECT 
+          ?songLabel
+          (SAMPLE(?img) AS ?immagine)
+          (MIN(?data) AS ?dataUscita) 
+          (GROUP_CONCAT(DISTINCT ?genereLabel; separator=", ") AS ?generi)
+          (GROUP_CONCAT(DISTINCT ?produttoreLabel; separator=", ") AS ?produttori)
+          (GROUP_CONCAT(DISTINCT ?premioLabel; separator=", ") AS ?premi)
+          # Uniamo tutti gli artisti in un'unica stringa separata da "||"
+          (GROUP_CONCAT(DISTINCT ?artistPack; separator="||") AS ?artisti)
         WHERE {{
-          BIND(<{entity_url}> AS ?canzone)
-          
-          # Label della canzone con priorità IT > EN
-          OPTIONAL {{
-            ?canzone rdfs:label ?labelIT . FILTER(lang(?labelIT) = "it")
-          }}
-          OPTIONAL {{
-            ?canzone rdfs:label ?labelEN . FILTER(lang(?labelEN) = "en")
-          }}
-          BIND(COALESCE(?labelIT, ?labelEN, "Sconosciuto") AS ?canzoneLabel)
+          # --- CORREZIONE QUI SOTTO ---
+          # Prima avevi wd:Q248185, ora usiamo la variabile dinamica
+          BIND({entity_url} AS ?song) . 
 
-          OPTIONAL {{ ?canzone wdt:P18 ?immagine . }}
-          OPTIONAL {{ ?canzone wdt:P577|wdt:P571 ?dataPubblicazione . }}
+          # Dati semplici
+          OPTIONAL {{ ?song wdt:P18 ?img . }}
+          OPTIONAL {{ ?song wdt:P577 ?data . }}
+          OPTIONAL {{ ?song wdt:P136 ?genere . }}
+          OPTIONAL {{ ?song wdt:P162 ?produttore . }}
+          OPTIONAL {{ ?song wdt:P166 ?premio . }}
 
-          # Generi: Cerchiamo IT, se manca usiamo EN
+          # RECUPERO ARTISTI (Gestione Multipla)
           OPTIONAL {{ 
-            ?canzone wdt:P136 ?g . 
-            OPTIONAL {{ ?g rdfs:label ?gIT . FILTER(lang(?gIT) = "it") }}
-            OPTIONAL {{ ?g rdfs:label ?gEN . FILTER(lang(?gEN) = "en") }}
-            BIND(COALESCE(?gIT, ?gEN) AS ?genereLabel)
-          }}
-
-          # Produttori: Cerchiamo IT, se manca usiamo EN
-          OPTIONAL {{ 
-            ?canzone wdt:P162 ?p . 
-            OPTIONAL {{ ?p rdfs:label ?pIT . FILTER(lang(?pIT) = "it") }}
-            OPTIONAL {{ ?p rdfs:label ?pEN . FILTER(lang(?pEN) = "en") }}
-            BIND(COALESCE(?pIT, ?pEN) AS ?produttoreLabel)
+            ?song wdt:P175 ?artist .
+            # Cerchiamo label IT, poi EN
+            OPTIONAL {{ ?artist rdfs:label ?rawArtistLabel . FILTER(LANG(?rawArtistLabel) = "it") }}
+            OPTIONAL {{ ?artist rdfs:label ?rawArtistLabelEn . FILTER(LANG(?rawArtistLabelEn) = "en") }}
+            
+            # Se non c'è label, usa l'URL come fallback
+            BIND(COALESCE(?rawArtistLabel, ?rawArtistLabelEn, STR(?artist)) AS ?finalArtistName)
+            
+            # Creiamo il pacchetto "Nome::URL"
+            BIND(CONCAT(?finalArtistName, "::", STR(?artist)) AS ?artistPack)
           }}
 
-          # Premi: Cerchiamo IT, se manca usiamo EN
-          OPTIONAL {{ 
-            ?canzone wdt:P166 ?pr . 
-            OPTIONAL {{ ?pr rdfs:label ?prIT . FILTER(lang(?prIT) = "it") }}
-            OPTIONAL {{ ?pr rdfs:label ?prEN . FILTER(lang(?prEN) = "en") }}
-            BIND(COALESCE(?prIT, ?prEN) AS ?premioLabel)
-          }}
-          
-          # Artisti: Cerchiamo IT, se manca usiamo EN
-          OPTIONAL {{ 
-            ?canzone wdt:P175 ?a . 
-            OPTIONAL {{ ?a rdfs:label ?aIT . FILTER(lang(?aIT) = "it") }}
-            OPTIONAL {{ ?a rdfs:label ?aEN . FILTER(lang(?aEN) = "en") }}
-            BIND(COALESCE(?aIT, ?aEN) AS ?aLabel)
-            BIND(CONCAT(STR(?aLabel), ">", STR(?a)) AS ?artistaInfo)
+          # Servizio label per tutto il resto
+          SERVICE wikibase:label {{ 
+            bd:serviceParam wikibase:language "it,en". 
+            ?song rdfs:label ?songLabel .
+            ?genere rdfs:label ?genereLabel .
+            ?produttore rdfs:label ?produttoreLabel .
+            ?premio rdfs:label ?premioLabel .
           }}
         }}
-        GROUP BY ?canzoneLabel
+        GROUP BY ?songLabel
+        """
+        
+        try:
+            r = requests.get(self.url, params={'query': query, 'format': 'json'}, headers=self.headers)
+            r.raise_for_status()
+            results = r.json().get('results', {}).get('bindings', [])
+            
+            if not results:
+                return {'found': False}
+
+            res = results[0]
+            
+            # --- PARSING DEGLI ARTISTI ---
+            # La stringa arriva tipo: "Elvis Presley::http://...||The Jordanaires::http://..."
+            artisti_raw = res.get('artisti', {}).get('value', '')
+            lista_artisti = []
+            
+            if artisti_raw:
+                # 1. Separiamo i vari artisti usando '||'
+                for item in artisti_raw.split('||'):
+                    # 2. Separiamo Nome da URL usando '::'
+                    if '::' in item:
+                        parts = item.split('::')
+                        nome = parts[0]
+                        # Prende l'URL (e gestisce casi limite)
+                        url = parts[1] if len(parts) > 1 else ""
+                        
+                        if nome and url:
+                            lista_artisti.append({'name': nome, 'url': url})
+            
+            # Fallback visivo se la lista è vuota
+            if not lista_artisti:
+                 lista_artisti.append({'name': 'Artista non specificato', 'url': ''})
+
+            return {
+                'found': True,
+                'wikidata_url': entity_url.replace('<','').replace('>',''),
+                'title': res.get('songLabel', {}).get('value', 'Titolo Sconosciuto'),
+                'image': res.get('immagine', {}).get('value', None),
+                'date': res.get('dataUscita', {}).get('value', '').split('T')[0] if 'dataUscita' in res else 'N/D',
+                'genres': res.get('generi', {}).get('value', 'N/D'),
+                'producers': res.get('produttori', {}).get('value', 'N/D'),
+                'awards': res.get('premi', {}).get('value', 'Nessuno'),
+                'artisti_list': lista_artisti
+            }
+            
+        except Exception as e:
+            print(f"Errore Get Details: {e}")
+            return {'found': False}
+
+
+    def get_artist_details(self, entity_url):
+        """
+        Estrae i dettagli di un artista partendo dal suo URL Wikidata (QID).
+        """
+        query = f"""
+        SELECT ?nome 
+               (MAX(?immagine) AS ?img)
+               (MAX(?bio) AS ?desc)
+               (MAX(?nascita) AS ?dataNascita)
+               (MAX(?morte) AS ?dataMorte)
+               (MAX(?luogoLabel) AS ?luogo)
+               (GROUP_CONCAT(DISTINCT ?genereLabel; separator=", ") AS ?generi)
+        WHERE {{
+          BIND(<{entity_url}> AS ?artista)
+          
+          # Nome con priorità Italiano > Inglese
+          OPTIONAL {{ ?artista rdfs:label ?nIT . FILTER(lang(?nIT) = "it") }}
+          OPTIONAL {{ ?artista rdfs:label ?nEN . FILTER(lang(?nEN) = "en") }}
+          BIND(COALESCE(?nIT, ?nEN) AS ?nome)
+
+          # Biografia/Descrizione breve
+          OPTIONAL {{ ?artista schema:description ?bio . FILTER(lang(?bio) = "it") }}
+          
+          # Immagine
+          OPTIONAL {{ ?artista wdt:P18 ?immagine . }}
+          
+          # Date
+          OPTIONAL {{ ?artista wdt:P569 ?nascita . }}
+          OPTIONAL {{ ?artista wdt:P570 ?morte . }}
+          
+          # Luogo (nascita o origine)
+          OPTIONAL {{ 
+            ?artista wdt:P19|wdt:P740 ?l . 
+            ?l rdfs:label ?luogoLabel . FILTER(lang(?luogoLabel) = "it") 
+          }}
+          
+          # Generi
+          OPTIONAL {{ 
+            ?artista wdt:P136 ?g . 
+            ?g rdfs:label ?genereLabel . FILTER(lang(?genereLabel) = "it") 
+          }}
+        }}
+        GROUP BY ?nome
         """
         try:
             r = requests.get(self.url, params={'query': query, 'format': 'json'}, headers=self.headers)
@@ -131,31 +223,18 @@ class WikiAgent:
             
             if results:
                 res = results[0]
-                artisti_raw = res.get('artisti', {}).get('value', '').split('||')
-                lista_artisti = []
-                # Set per evitare duplicati di URL artista (stessa persona con label IT ed EN)
-                seen_artists = set()
-                
-                for item in artisti_raw:
-                    if '>' in item:
-                        nome, url = item.split('>')
-                        if url not in seen_artists:
-                            lista_artisti.append({'name': nome, 'url': url})
-                            seen_artists.add(url)
-
                 return {
                     'found': True,
-                    'wikidata_url': entity_url,
-                    'title': res.get('canzoneLabel', {}).get('value', 'Sconosciuto'),
+                    'name': res.get('nome', {}).get('value', 'Sconosciuto'),
                     'image': res.get('img', {}).get('value'),
-                    'date': res.get('data', {}).get('value', '').split('T')[0] if 'data' in res else 'N/D',
-                    'genres': res.get('generi', {}).get('value', '').replace('|', ', ') or 'N/D',
-                    'producers': res.get('produttori', {}).get('value', '').replace('|', ', ') or 'N/D',
-                    'awards': res.get('premi', {}).get('value', '').replace('|', ', ') or 'Nessuno',
-                    'artisti_list': lista_artisti
+                    'description': res.get('desc', {}).get('value', 'Nessuna biografia disponibile su Wikidata.'),
+                    'birth': res.get('dataNascita', {}).get('value', '').split('T')[0] if 'dataNascita' in res else None,
+                    'death': res.get('dataMorte', {}).get('value', '').split('T')[0] if 'dataMorte' in res else None,
+                    'origin': res.get('luogo', {}).get('value', 'Non specificato'),
+                    'genres': res.get('generi', {}).get('value', 'Non specificato'),
+                    'url': entity_url
                 }
             return {'found': False}
         except Exception as e:
-            print(f"Errore: {e}")
+            print(f"Errore nel recupero dell'artista: {e}")
             return {'found': False}
-

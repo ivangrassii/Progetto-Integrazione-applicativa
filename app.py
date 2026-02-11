@@ -41,11 +41,21 @@ def track_detail():
 
     return render_template('track.html', title=title, artist=artist, album=album, wiki=wiki_data)
 
-# (La rotta /artist la teniamo per la mappa, ma non la usiamo più nei bottoni della traccia)
-@app.route('/artist/<name>')
-def artist_detail(name):
-    # ... [Codice invariato] ...
-    pass 
+
+@app.route('/artista')
+def artist_detail():
+    artist_url = request.args.get('url')
+    
+    if not artist_url:
+        return "URL Artista mancante", 400
+        
+    # Chiamata al nuovo metodo del WikiAgent
+    artist_data = agent.get_artist_details(artist_url)
+    
+    if not artist_data['found']:
+        return "Artista non trovato su Wikidata", 404
+        
+    return render_template('artista.html', artist=artist_data)
 
 if __name__ == '__main__':
     print("Avvio del server di Integrazione Applicativa...")
