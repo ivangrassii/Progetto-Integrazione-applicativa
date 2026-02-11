@@ -33,6 +33,7 @@ def track_detail():
     artist = request.args.get('artist')
     album = request.args.get('album')
     
+    
     # Qui renderizziamo la pagina intermedia
     return render_template('track.html', title=title, artist=artist, album=album)
 

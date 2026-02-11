@@ -5,57 +5,108 @@
     <title>Playlist Analizzata</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
-        body { background-color: #121212; color: white; }
+        body { background-color: #121212; color: white; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; }
+        
+        /* Titolo Verde Spotify */
+        .spotify-title {
+            color: #1db954;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
         .track-card { 
             background: #181818; 
             border: 1px solid #282828; 
-            margin-bottom: 10px;
+            margin-bottom: 15px;
+            transition: all 0.3s ease;
+            border-radius: 8px;
         }
-        .track-card:hover { background: #282828; }
+        
+        /* Effetto Hover: Si illumina leggermente */
+        .track-card:hover { 
+            background: #282828; 
+            border-color: #1db954; 
+            transform: translateX(5px);
+        }
+        
         .btn-song {
-            background-color: #1db954; color: white; border: none; font-weight: bold;
+            background-color: transparent; 
+            border: 1px solid #1db954; 
+            color: #1db954; 
+            font-weight: bold;
+            border-radius: 20px;
+            text-transform: uppercase;
+            font-size: 0.8rem;
+            letter-spacing: 1px;
         }
-        .btn-song:hover { background-color: #1ed760; color: black; }
-        .scrollable-list { max-height: 80vh; overflow-y: auto; padding-right: 10px;}
+        
+        .btn-song:hover { 
+            background-color: #1db954; 
+            color: white; 
+            box-shadow: 0 0 10px rgba(29, 185, 84, 0.5);
+        }
+
+        .album-cover {
+            width: 80px;
+            height: 80px;
+            object-fit: cover;
+            border-radius: 4px;
+        }
     </style>
 </head>
 <body>
-    <div class="container-fluid py-4">
-        <div class="d-flex justify-content-between align-items-center mb-4">
-            <h3>🎵 Playlist: {{ tracks|length }} Tracce</h3>
-            <a href="/" class="btn btn-outline-light btn-sm">← Nuova Ricerca</a>
+    
+    <nav class="navbar navbar-dark bg-black mb-4 p-3 border-bottom border-secondary">
+        <div class="container">
+            <span class="navbar-brand h1 fw-bold">🎵 Music Knowledge Graph</span>
+            <a href="/" class="btn btn-outline-light btn-sm rounded-pill px-3">← Nuova Ricerca</a>
+        </div>
+    </nav>
+
+    <div class="container pb-5">
+
+        <div class="mb-5 shadow-lg">
+            <iframe style="border-radius:12px" 
+                    src="https://open.spotify.com/embed/playlist/{{ pid }}?utm_source=generator&theme=0" 
+                    width="100%" height="80" frameBorder="0" allowfullscreen="" 
+                    allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture" 
+                    loading="lazy">
+            </iframe>
         </div>
 
-        {% if demo %}
-        <div class="alert alert-warning">⚠️ <b>Modalità Demo:</b> Dati simulati per dimostrazione accademica.</div>
-        {% endif %}
+        <div class="d-flex justify-content-between align-items-center mb-4 border-bottom border-secondary pb-2">
+            <h2 class="spotify-title">Tracce Rilevate ({{ tracks|length }})</h2>
+            {% if demo %}
+                <span class="badge bg-warning text-dark">⚠️ Modalità Demo</span>
+            {% else %}
+                <span class="badge bg-success">✅ Dati Reali API</span>
+            {% endif %}
+        </div>
 
         <div class="row">
-            <div class="col-md-4">
-                <div class="sticky-top" style="top: 20px;">
-                    <iframe style="border-radius:12px" 
-                            src="https://open.spotify.com/embed/playlist/{{ pid }}?utm_source=generator&theme=0" 
-                            width="100%" height="400" frameBorder="0" allowfullscreen="" loading="lazy">
-                    </iframe>
-                </div>
-            </div>
-
-            <div class="col-md-8 scrollable-list">
+            <div class="col-12">
                 {% for track in tracks %}
-                <div class="card track-card p-3">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <div style="flex-grow: 1;">
-                            <h5 class="mb-1 text-white">{{ track.title }}</h5>
-                            <p class="mb-0 text-muted">
-                                Album: {{ track.album }} <br>
-                                <span class="badge bg-dark border border-secondary text-secondary">🎤 {{ track.artist }}</span>
+                <div class="card track-card p-3 shadow-sm">
+                    <div class="row align-items-center">
+                        
+                        <div class="col-auto">
+                            <img src="{{ track.cover }}" alt="Cover" class="album-cover shadow">
+                        </div>
+
+                        <div class="col">
+                            <h4 class="mb-1 fw-bold text-white">{{ track.title }}</h4>
+                            <p class="mb-0 text-secondary">
+                                <span class="text-white-50">{{ track.album }}</span> 
+                                <br>
+                                <span class="text-success fw-bold">🎤 {{ track.artist }}</span>
                             </p>
                         </div>
 
-                        <div>
+                        <div class="col-auto">
                             <a href="/track?artist={{ track.artist }}&title={{ track.title }}&album={{ track.album }}" 
-                               class="btn btn-song px-4">
-                                Dettagli Canzone →
+                               class="btn btn-song px-4 py-2">
+                                Dettagli & Analisi
                             </a>
                         </div>
                     </div>
@@ -63,6 +114,7 @@
                 {% endfor %}
             </div>
         </div>
+
     </div>
 </body>
 </html>
