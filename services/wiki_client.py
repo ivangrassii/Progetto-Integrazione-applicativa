@@ -35,27 +35,32 @@ class WikiAgent:
             return None
 
     def get_track_url(self, title, artist):
+        
+        # Pulizia nomi per la query
         clean_title = title.replace('"', '').replace("'", "")
         clean_artist = artist.replace('"', '').replace("'", "")
         
         query = f"""
-        SELECT ?canzone WHERE {{
-          SERVICE wikibase:mwapi {{
-              bd:serviceParam wikibase:api "EntitySearch" .
-              bd:serviceParam wikibase:endpoint "www.wikidata.org" .
-              bd:serviceParam mwapi:search "{clean_title} {clean_artist}" .
-              bd:serviceParam mwapi:language "en" .
-              ?canzone wikibase:apiOutputItem mwapi:item .
-          }}
-          ?canzone wdt:P175 ?artista .
+        SELECT DISTINCT ?canzone WHERE {{
+          # Usa 'clean_title' perché 'track_name' non è definita
+          ?canzone rdfs:label "{clean_title}"@it. 
+          
+          # Usa 'clean_artist'
+          ?canzone wdt:P175 ?artista.
+          ?artista rdfs:label "{clean_artist}"@it.
+
+          # Filtro per opere musicali o sottoclassi
+          ?canzone wdt:P31/wdt:P279* wd:Q2188189. 
         }} LIMIT 1
         """
         try:
-            r = requests.get(self.url, params={'query': query}, headers=self.headers)
+            r = requests.get(self.url, params={'query': query, 'format': 'json'}, headers=self.headers)
             r.raise_for_status()
-            results = r.json().get('results', {}).get('bindings', [])
+            data = r.json()
+            results = data.get('results', {}).get('bindings', [])
             return results[0]['canzone']['value'] if results else None
-        except Exception:
+        except Exception as e:
+            print(f"Errore SPARQL: {e}")
             return None
 
     def get_entity_details(self, entity_url):
