@@ -2,30 +2,125 @@
 <html lang="it">
 <head>
     <meta charset="UTF-8">
-    <title>Dettagli Canzone</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dettagli - {{ title }}</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        :root { --bg-color: #121212; --text-main: #ffffff; --text-muted: #b3b3b3; --spotify-green: #1db954; }
+        body {
+            background: linear-gradient(rgba(0,0,0,0.85), rgba(0,0,0,0.95)), url('{{ wiki.image }}');
+            background-size: cover; background-position: center; background-attachment: fixed;
+            color: var(--text-main); font-family: 'Inter', sans-serif; min-height: 100vh; padding: 40px 20px;
+        }
+        .main-container {
+            max-width: 1000px; margin: 0 auto; background: rgba(30, 30, 30, 0.7);
+            backdrop-filter: blur(25px); border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 20px; padding: 40px; box-shadow: 0 25px 50px rgba(0,0,0,0.5);
+        }
+        .cover-image { width: 220px; height: 220px; object-fit: cover; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.6); }
+        .data-box { background: rgba(0,0,0,0.4); padding: 20px; border-radius: 12px; border-left: 4px solid var(--spotify-green); height: 100%;}
+        
+        /* Stile per le card degli artisti */
+        .artist-card {
+            background: rgba(0, 0, 0, 0.5); border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 15px; padding: 25px; transition: 0.3s; height: 100%;
+        }
+        .artist-card:hover { background: rgba(0, 0, 0, 0.7); border-color: var(--spotify-green); }
+        .artist-title { font-size: 1.4rem; font-weight: 800; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px; margin-bottom: 15px;}
+        .info-list li { margin-bottom: 10px; font-size: 0.95rem; color: #ddd; }
+        .info-list i { color: var(--spotify-green); margin-right: 8px; }
+    </style>
 </head>
-<body class="bg-dark text-white text-center d-flex align-items-center" style="height: 100vh;">
-    
-    <div class="container">
-        <div class="card bg-secondary text-white mx-auto shadow-lg p-4" style="max-width: 600px;">
-            <div class="card-body">
-                <h5 class="text-uppercase text-warning mb-3">Scheda Brano</h5>
-                
-                <h1 class="display-4 fw-bold">{{ title }}</h1>
-                <h3 class="text-light fw-light mb-4">{{ album }}</h3>
-                
-                <hr class="border-light my-4">
+<body>
 
-                <p class="lead">Per scoprire le connessioni semantiche (luoghi, date, premi), analizza l'autore nel Knowledge Graph:</p>
-                
-                <a href="/artist/{{ artist }}" class="btn btn-success btn-lg w-100 py-3 fw-bold shadow">
-                    🌍 Analizza {{ artist }} su Wikidata
-                </a>
-
-                <br><br>
-                <a href="javascript:history.back()" class="text-white-50 text-decoration-none">← Torna alla playlist</a>
+    <div class="main-container">
+        
+        <div class="d-flex gap-4 align-items-end mb-5 flex-wrap">
+            <img src="{{ wiki.image }}" alt="Copertina" class="cover-image" onerror="this.src='https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?q=80&w=500&auto=format&fit=crop'">
+            <div>
+                {% if wiki.found %}
+                    <span class="badge bg-success mb-2 px-3 py-2 rounded-pill"><i class="bi bi-check-circle-fill me-1"></i> Trovato su Wikidata</span>
+                {% else %}
+                    <span class="badge bg-warning text-dark mb-2 px-3 py-2 rounded-pill"><i class="bi bi-exclamation-triangle-fill me-1"></i> Dati Base Spotify</span>
+                {% endif %}
+                <h1 class="display-4 fw-bold mb-2" style="letter-spacing: -1.5px;">{{ title }}</h1>
+                <h4 class="text-muted fw-normal"><i class="bi bi-disc me-2"></i>{{ album }}</h4>
             </div>
+        </div>
+
+        {% if wiki.found %}
+        <div class="row g-3 mb-5">
+            <div class="col-md-3 col-sm-6">
+                <div class="data-box">
+                    <div class="text-muted text-uppercase small mb-1">Pubblicazione</div>
+                    <div class="fw-bold fs-5">{{ wiki.date }}</div>
+                </div>
+            </div>
+            <div class="col-md-3 col-sm-6">
+                <div class="data-box">
+                    <div class="text-muted text-uppercase small mb-1">Genere</div>
+                    <div class="fw-bold fs-5">{{ wiki.genre }}</div>
+                </div>
+            </div>
+            <div class="col-md-3 col-sm-6">
+                <div class="data-box">
+                    <div class="text-muted text-uppercase small mb-1">Produttore</div>
+                    <div class="fw-bold fs-5">{{ wiki.producer }}</div>
+                </div>
+            </div>
+            <div class="col-md-3 col-sm-6">
+                <div class="data-box" style="border-left-color: #ffd700;">
+                    <div class="text-muted text-uppercase small mb-1"><i class="bi bi-trophy-fill text-warning me-1"></i> Premi</div>
+                    <div class="fw-bold fs-5">{{ wiki.awards }}</div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <hr style="border-color: rgba(255,255,255,0.2); margin: 40px 0;">
+
+        <h3 class="fw-bold mb-4" style="color: var(--spotify-green);"><i class="bi bi-people-fill me-2"></i> Profili Artisti e Collaboratori</h3>
+        
+        <div class="row g-4">
+            {% for a in artists %}
+            <div class="col-md-6">
+                <div class="artist-card shadow-sm">
+                    <div class="artist-title">
+                        <i class="bi bi-person-circle me-2 text-white"></i>{{ a.name }}
+                    </div>
+                    
+                    {% if a.not_found %}
+                        <p class="text-warning small mt-3"><i class="bi bi-exclamation-triangle-fill me-1"></i> Impossibile estrarre le triple per questa entità da Wikidata.</p>
+                    {% else %}
+                        <ul class="list-unstyled info-list">
+                            {% if a.description %}
+                                <li><i class="bi bi-info-square-fill"></i> <strong>Bio:</strong> {{ a.description.value }}</li>
+                            {% endif %}
+                            {% if a.genreLabel %}
+                                <li><i class="bi bi-music-note-list"></i> <strong>Genere:</strong> {{ a.genreLabel.value }}</li>
+                            {% endif %}
+                            {% if a.placeLabel %}
+                                <li><i class="bi bi-geo-alt-fill"></i> <strong>Origine:</strong> {{ a.placeLabel.value }}</li>
+                            {% endif %}
+                        </ul>
+                        
+                        <div class="mt-3">
+                            <a href="{{ a.item.value }}" target="_blank" class="btn btn-outline-light btn-sm rounded-pill">
+                                <i class="bi bi-link-45deg"></i> URI Wikidata Artista
+                            </a>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+
+        <div class="text-center mt-5">
+             <a href="javascript:history.back()" class="text-white-50 text-decoration-none">
+                 <i class="bi bi-arrow-left me-1"></i> Torna alla playlist
+             </a>
         </div>
     </div>
 

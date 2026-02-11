@@ -18,8 +18,10 @@ class SpotifyHandler:
     def extract_id_from_url(self, url):
         if not url: return "demo"
         try:
+            # Pulisce eventuali parametri di tracciamento
             url = url.strip().split('?')[0]
-            match = re.search(r"playlist/([a-zA-Z0-9]+)", url)
+            # Migliorato: ora accetta sia "playlist/ID" che "playlist:ID"
+            match = re.search(r"playlist[/:]([a-zA-Z0-9]+)", url)
             return match.group(1) if match else "demo"
         except:
             return "demo"
@@ -30,9 +32,16 @@ class SpotifyHandler:
         # 1. TENTATIVO API (Dati Reali)
         if self.active:
             try:
+                # Scarica il primo blocco di risultati
                 results = self.sp.playlist_items(playlist_id)
+                items = results.get('items', [])
                 
-                for item in results.get('items', []):
+                # LA MAGIA DELLA PAGINAZIONE: Continua a scaricare finché ci sono pagine successive!
+                while results['next']:
+                    results = self.sp.next(results)
+                    items.extend(results['items'])
+                
+                for item in items:
                     track = item.get('track')
                     if track:
                         # Gestione Immagine (Prendiamo la media, index 1, o la prima disponibile)
@@ -54,7 +63,8 @@ class SpotifyHandler:
                 if len(tracks) > 0:
                     return tracks, False # False = Dati Reali
 
-            except Exception:
+            except Exception as e:
+                print(f"Errore API Spotify: {e}") # Stampa l'errore nel terminale per aiutarti a capire cosa è andato storto
                 pass # Se fallisce, va al backup silenziosamente
 
         # 2. DATASET DI BACKUP (Se le API falliscono)
