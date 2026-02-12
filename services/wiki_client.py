@@ -266,7 +266,7 @@ class WikiAgent:
             }} LIMIT 5
           }}
           UNION
-          # --- BLOCCO 2: Discovery (Genere + Filtro Data Opzionale) ---
+          # --- BLOCCO 2: Discovery ---
           {{
              SELECT DISTINCT ?song ?artistLabel ?type WHERE {{
                 BIND(wd:{song_id} AS ?inputSong) .
@@ -277,7 +277,6 @@ class WikiAgent:
                 OPTIONAL {{ ?inputSong wdt:P577 ?inputDate . }}
                 BIND(YEAR(?inputDate) AS ?inputYear)
 
-                # 2. Cerca per GENERE (Veloce)
                 ?song wdt:P136 ?targetGenre ;
                       wdt:P31 wd:Q7366 ;
                       wdt:P175 ?artist .
@@ -285,7 +284,6 @@ class WikiAgent:
                 FILTER(?song != ?inputSong)
                 FILTER(?artist != ?inputArtist)
 
-                # 3. Filtro Data Intelligente (Se c'è, usala. Se no, passa.)
                 OPTIONAL {{ ?song wdt:P577 ?songDate . }}
                 BIND(YEAR(?songDate) AS ?songYear)
                 

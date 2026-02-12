@@ -3,7 +3,7 @@
    ========================================================================== */
 :root { 
     --bg-dark: #121212; 
-    --card-bg: rgba(255, 255, 255, 0.08);
+    --card-bg: rgba(255, 255, 255, 0.24);
     --spotify-green: #1db954; 
     --spotify-green-hover: #1ed760;
     --text-main: #ffffff; 
@@ -286,6 +286,7 @@ body {
 
 .meta-item {
     background: rgba(255, 255, 255, 0.03); 
+    color: #ffffff ;
     padding: 8px 12px; 
     border-radius: 8px; 
     margin-bottom: 6px;
