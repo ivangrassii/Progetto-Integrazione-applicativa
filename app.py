@@ -72,7 +72,7 @@ def track_detail():
     if spotify_image:
         wiki_data['image'] = spotify_image
     elif not wiki_data.get('image'):
-        wiki_data['image'] = 'https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?q=80&w=500'
+        wiki_data['image'] = 'https://img.pixers.pics/pho_wat(s3:700/FO/62/54/28/58/700_FO62542858_dc0c3c4b646ab8a8a389c58f8af73ed9.jpg,700,688,cms:2018/10/5bd1b6b8d04b8_220x50-watermark.png,over,480,638,jpg)/adesivi-disco-di-vinile-isolato-su-sfondo-bianco.jpg'
 
     return render_template('track.html', title=title, artist=artist, album=album, wiki=wiki_data)
 
@@ -83,8 +83,6 @@ def artist_detail():
     
     if not artist_url:
         return "URL Artista mancante", 400
-        
-    # Chiamata al nuovo metodo del WikiAgent
     artist_data = agent.get_artist_details(artist_url)
     
     if not artist_data['found']:
@@ -94,4 +92,4 @@ def artist_detail():
 
 if __name__ == '__main__':
     print("Avvio del server di Integrazione Applicativa...")
-    app.run(host='127.0.0.1', port=5001, debug=True)
+    app.run(host='0.0.0.0', port=5001, debug=True)
