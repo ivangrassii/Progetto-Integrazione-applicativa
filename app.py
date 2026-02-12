@@ -19,19 +19,60 @@ def load():
     tracks, is_demo = sp_handler.get_playlist_tracks(pid)
     return render_template('playlist.html', tracks=tracks, pid=pid, demo=is_demo)
 
+@app.route('/resolve_track')
+def resolve_track():
+    title = request.args.get('title')
+    artist = request.args.get('artist')
+    album = request.args.get('album', '')
+    img = request.args.get('image', '')
+    track_url, artist_url = agent.get_track_url(title, artist)
+
+    if track_url:
+
+        return redirect(url_for('track_detail', 
+                              id=track_url, 
+                              artist_id=artist_url,
+                              title=title, 
+                              artist=artist, 
+                              album=album, 
+                              image=img))
+    else:
+        return redirect(url_for('track_detail', 
+                              found='false',
+                              title=title, 
+                              artist=artist, 
+                              album=album, 
+                              image=img))
+
 @app.route('/track')
 def track_detail():
+    wikidata_id = request.args.get('id')
+    wikidata_artist_id = request.args.get('artist_id') 
+
     title = request.args.get('title', 'Sconosciuto')
     artist = request.args.get('artist', 'Sconosciuto')
-    album = request.args.get('album', 'Sconosciuto')
-    spotify_image = request.args.get('image')
+    album = request.args.get('album', '')
+    spotify_image = request.args.get('image', '')
     
-    track_url = agent.get_track_url(title, artist)
-    
-    if track_url:
-        wiki_data = agent.get_track_details(track_url)
-    else:
-        wiki_data = {'found': False, 'artisti_list': [{'name': artist, 'url': None}]}
+    wiki_data = {
+        'found': False, 
+        'artisti_list': [{'name': artist, 'url': None}],
+        'recommendations': [] 
+    }
+
+    if wikidata_id:
+  
+        details = agent.get_track_details(wikidata_id)
+        
+        if details['found']:
+            wiki_data = details 
+            recs = agent.get_recommendations(wikidata_id, wikidata_artist_id)
+            wiki_data['recommendations'] = recs
+
+    if spotify_image:
+        wiki_data['image'] = spotify_image
+    elif not wiki_data.get('image'):
+        wiki_data['image'] = 'https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?q=80&w=500'
 
     return render_template('track.html', title=title, artist=artist, album=album, wiki=wiki_data)
 

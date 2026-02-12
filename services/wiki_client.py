@@ -12,15 +12,16 @@ class WikiAgent:
 
     def get_track_url(self, title, artist):
         """
-        Fase 1: Trova l'URL Wikidata della canzone usando il servizio mwapi (EntitySearch).
-        Questo metodo evita il timeout e risolve i problemi di etichette multilingua.
+        Fase 1: Trova l'URL Wikidata della canzone E dell'artista.
+        Restituisce una tupla: (track_url, artist_url)
         """
         # Pulizia per evitare che le virgolette rompano la sintassi SPARQL
         clean_title = title.replace('"', '')
         clean_artist = artist.replace('"', '')
         
+        # MODIFICA 1: Aggiunto ?artista alla SELECT
         query = f"""
-        SELECT DISTINCT ?canzone WHERE {{
+        SELECT DISTINCT ?canzone ?artista WHERE {{
           # Cerca l'artista tramite motore di ricerca interno
           SERVICE wikibase:mwapi {{
               bd:serviceParam wikibase:api "EntitySearch" .
@@ -42,28 +43,28 @@ class WikiAgent:
           # Verifica che la canzone sia effettivamente collegata all'artista
           ?canzone wdt:P175 ?artista .
           
-          # Verifica che sia un'opera musicale o sottoclasse (es. canzone, singolo)
+          # Verifica che sia un'opera musicale o sottoclasse
           ?canzone wdt:P31/wdt:P279* wd:Q2188189 . 
         }} LIMIT 1
         """
         try:
-            # Effettua la richiesta al server Wikidata
             r = requests.get(self.url, params={'query': query, 'format': 'json'}, headers=self.headers)
             r.raise_for_status()
             data = r.json()
             
             results = data.get('results', {}).get('bindings', [])
             
-            # Se troviamo un risultato, restituiamo l'URL dell'entità
+            # MODIFICA 2: Restituiamo entrambi i valori
             if results:
-                return results[0]['canzone']['value']
+                song_url = results[0]['canzone']['value']
+                artist_url = results[0]['artista']['value']
+                return song_url, artist_url
             
-            # Se non trova nulla, restituiamo None
-            return None
+            return None, None
             
         except Exception as e:
             print(f"Errore nel recupero URL tramite mwapi: {e}")
-            return None
+            return None, None
 
     def get_track_details(self, entity_url):
         """
@@ -239,3 +240,104 @@ class WikiAgent:
         except Exception as e:
             print(f"Errore nel recupero dell'artista: {e}")
             return {'found': False}
+
+    def get_recommendations(self, song_url, artist_url):
+        if not song_url or not artist_url: return []
+
+        song_id = song_url.split('/')[-1]
+        artist_id = artist_url.split('/')[-1]
+        
+        # Query Ottimizzata Anti-Timeout
+        query = f"""
+        SELECT DISTINCT ?song ?songLabel ?artist ?artistLabel ?image ?type WHERE {{
+          # INPUT
+          BIND(wd:{song_id} AS ?inputSong) .
+          BIND(wd:{artist_id} AS ?inputArtist) .
+
+          # --- BLOCCO 1: Fan Choice (Stesso Artista) ---
+          {{
+            SELECT DISTINCT ?song ?artistLabel ?type WHERE {{
+                BIND(wd:{song_id} AS ?inputSong) .
+                BIND(wd:{artist_id} AS ?inputArtist) .
+                ?song wdt:P31 wd:Q7366 ; wdt:P175 ?inputArtist.
+                FILTER(?song != ?inputSong)
+                BIND("Fan Choice" AS ?type)
+                BIND("Stesso Artista" AS ?artistLabel)
+            }} LIMIT 5
+          }}
+          UNION
+          # --- BLOCCO 2: Discovery (Genere + Filtro Data Opzionale) ---
+          {{
+             SELECT DISTINCT ?song ?artistLabel ?type WHERE {{
+                BIND(wd:{song_id} AS ?inputSong) .
+                BIND(wd:{artist_id} AS ?inputArtist) .
+                
+                # 1. Prendi genere e data input
+                ?inputSong wdt:P136 ?targetGenre .
+                OPTIONAL {{ ?inputSong wdt:P577 ?inputDate . }}
+                BIND(YEAR(?inputDate) AS ?inputYear)
+
+                # 2. Cerca per GENERE (Veloce)
+                ?song wdt:P136 ?targetGenre ;
+                      wdt:P31 wd:Q7366 ;
+                      wdt:P175 ?artist .
+                
+                FILTER(?song != ?inputSong)
+                FILTER(?artist != ?inputArtist)
+
+                # 3. Filtro Data Intelligente (Se c'è, usala. Se no, passa.)
+                OPTIONAL {{ ?song wdt:P577 ?songDate . }}
+                BIND(YEAR(?songDate) AS ?songYear)
+                
+                FILTER(
+                    !BOUND(?songDate) || 
+                    !BOUND(?inputYear) || 
+                    (?songYear >= (?inputYear - 4) && ?songYear <= (?inputYear + 4))
+                )
+
+                BIND("Discovery" AS ?type)
+                ?artist rdfs:label ?artistLabel . FILTER(LANG(?artistLabel) = "en")
+             }} LIMIT 5
+          }}
+          
+          OPTIONAL {{ ?song wdt:P18 ?image }}
+          SERVICE wikibase:label {{ bd:serviceParam wikibase:language "[AUTO_LANGUAGE],en,it". }}
+        }}
+        """
+        
+        try:
+            r = requests.get(self.url, params={'query': query, 'format': 'json'}, headers=self.headers)
+            results = r.json().get('results', {}).get('bindings', [])
+            recs = []
+            seen = set()
+
+            for res in results:
+                title = res.get("songLabel", {}).get("value", "Titolo Sconosciuto")
+                if title in seen: continue
+                seen.add(title)
+                
+                rec_type = res["type"]["value"]
+                
+                # Gestione URL Artista:
+                # Se è Fan Choice, usiamo l'URL originale (artist_url).
+                # Se è Discovery, usiamo quello trovato nella query (?artist).
+                if rec_type == "Fan Choice":
+                    current_artist_url = artist_url # Quello che abbiamo passato alla funzione
+                    artist_name = "Stesso Artista"
+                else:
+                    current_artist_url = res.get("artist", {}).get("value")
+                    artist_name = res.get("artistLabel", {}).get("value", "Artista Simile")
+
+                recs.append({
+                    "title": title, 
+                    "artist": artist_name, 
+                    "type": rec_type,
+                    "image": res.get("image", {}).get("value", "https://via.placeholder.com/150"),
+                    # DATI FONDAMENTALI PER IL LINK DIRETTO:
+                    "url": res["song"]["value"],       # ID Canzone (url wikidata)
+                    "artist_url": current_artist_url   # ID Artista
+                })
+            return recs
+        except Exception as e:
+            print(f"❌ Errore Recs: {e}")
+            return []
