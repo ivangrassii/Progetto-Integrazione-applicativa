@@ -6,7 +6,7 @@ from services.spotify import SpotifyHandler
 app = Flask(__name__)
 agent = WikiAgent()
 
-sp_handler = SpotifyHandler(client_id="97d33694cfc244108d9fdf068f419317", client_secret="cd7077144fe54cec9a12fd72d7481c48")
+sp_handler = SpotifyHandler(client_id="aa75bf8321234d9493c0e84adfe3d20e", client_secret="b3c8ac21c6f944e7975d33275678ab3c")
 
 @app.route('/')
 def home():
@@ -32,12 +32,6 @@ def track_detail():
         wiki_data = agent.get_track_details(track_url)
     else:
         wiki_data = {'found': False, 'artisti_list': [{'name': artist, 'url': None}]}
-
-    # Magia immagine Spotify
-    if spotify_image:
-        wiki_data['image'] = spotify_image
-    elif not wiki_data.get('image'):
-        wiki_data['image'] = 'https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?q=80&w=500&auto=format&fit=crop'
 
     return render_template('track.html', title=title, artist=artist, album=album, wiki=wiki_data)
 
