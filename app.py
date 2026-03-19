@@ -46,7 +46,7 @@ def resolve_track():
 
 @app.route('/track')
 def track_detail():
-    wikidata_id = request.args.get('id')
+    wikidata_id = request.args.get('id') 
     wikidata_artist_id = request.args.get('artist_id') 
 
     title = request.args.get('title', 'Sconosciuto')

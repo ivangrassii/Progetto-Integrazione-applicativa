@@ -249,59 +249,73 @@ class WikiAgent:
         
         # Query Ottimizzata Anti-Timeout
         query = f"""
-        SELECT DISTINCT ?song ?songLabel ?artist ?artistLabel ?image ?type WHERE {{
-          # INPUT
+        SELECT ?song ?songLabel ?artist ?artistLabel ?image ?type WHERE {{
           BIND(wd:{song_id} AS ?inputSong) .
           BIND(wd:{artist_id} AS ?inputArtist) .
 
-          # --- BLOCCO 1: Fan Choice (Stesso Artista) ---
           {{
-            SELECT DISTINCT ?song ?artistLabel ?type WHERE {{
-                BIND(wd:{song_id} AS ?inputSong) .
-                BIND(wd:{artist_id} AS ?inputArtist) .
-                ?song wdt:P31 wd:Q7366 ; wdt:P175 ?inputArtist.
-                FILTER(?song != ?inputSong)
-                BIND("Fan Choice" AS ?type)
-                BIND("Stesso Artista" AS ?artistLabel)
+            # --- BLOCCO 1: Fan Choice ---
+            SELECT ?song ?artist ?type WHERE {{
+              {{
+                SELECT DISTINCT ?song ?artist WHERE {{
+                  BIND(wd:{song_id} AS ?inputSong) .
+                  BIND(wd:{artist_id} AS ?inputArtist) .
+                  VALUES ?songType {{ wd:Q7366 wd:Q134556 wd:Q7302866 }}
+                  ?song wdt:P31 ?songType ; 
+                        wdt:P175 ?inputArtist.
+                  FILTER(?song != ?inputSong)
+                }} LIMIT 20 # Salvavita per Fan Choice
+              }}
+              BIND("Fan Choice" AS ?type)
             }} LIMIT 5
           }}
           UNION
-          # --- BLOCCO 2: Discovery ---
           {{
-             SELECT DISTINCT ?song ?artistLabel ?type WHERE {{
-                BIND(wd:{song_id} AS ?inputSong) .
-                BIND(wd:{artist_id} AS ?inputArtist) .
-                
-                # 1. Prendi genere e data input
-                ?inputSong wdt:P136 ?targetGenre .
-                OPTIONAL {{ ?inputSong wdt:P577 ?inputDate . }}
-                BIND(YEAR(?inputDate) AS ?inputYear)
+            # --- BLOCCO 2: Discovery ---
+            SELECT ?song ?artist ?type WHERE {{
+              {{
+                SELECT DISTINCT ?song ?artist WHERE {{
+                  BIND(wd:{song_id} AS ?inputSong) .
+                  BIND(wd:{artist_id} AS ?inputArtist) .
+                  
+                  ?inputSong wdt:P136 ?targetGenre .
+                  OPTIONAL {{ ?inputSong wdt:P577 ?inputDate . }}
+                  BIND(YEAR(?inputDate) AS ?inputYear)
+                  OPTIONAL {{ ?inputSong wdt:P407 ?inputLang . }}
 
-                ?song wdt:P136 ?targetGenre ;
-                      wdt:P31 wd:Q7366 ;
-                      wdt:P175 ?artist .
-                
-                FILTER(?song != ?inputSong)
-                FILTER(?artist != ?inputArtist)
+                  VALUES ?songType {{ wd:Q7366 wd:Q134556 wd:Q7302866 wd:Q2188189 }}
+                  ?song wdt:P136 ?targetGenre ;
+                        wdt:P31 ?songType ;
+                        wdt:P175 ?artist .
+                  
+                  FILTER(?song != ?inputSong)
+                  FILTER(?artist != ?inputArtist)
 
-                OPTIONAL {{ ?song wdt:P577 ?songDate . }}
-                BIND(YEAR(?songDate) AS ?songYear)
-                
-                FILTER(
+                  OPTIONAL {{ ?song wdt:P577 ?songDate . }}
+                  BIND(YEAR(?songDate) AS ?songYear)
+                  
+                  FILTER(
                     !BOUND(?songDate) || 
                     !BOUND(?inputYear) || 
                     (?songYear >= (?inputYear - 4) && ?songYear <= (?inputYear + 4))
-                )
+                  )
 
-                BIND("Discovery" AS ?type)
-                ?artist rdfs:label ?artistLabel . FILTER(LANG(?artistLabel) = "en")
-             }} LIMIT 5
+                  OPTIONAL {{ ?song wdt:P407 ?songLang . }}
+                  FILTER(
+                    !BOUND(?inputLang) || 
+                    !BOUND(?songLang) || 
+                    (?songLang = ?inputLang)
+                  )
+                }} LIMIT 20 # <--- IL SALVAVITA CHE RISOLVE LENTEZZA E TIMEOUT
+              }}
+              BIND("Discovery" AS ?type)
+            }} LIMIT 5
           }}
           
           OPTIONAL {{ ?song wdt:P18 ?image }}
           SERVICE wikibase:label {{ bd:serviceParam wikibase:language "[AUTO_LANGUAGE],en,it". }}
         }}
-        """
+"""
         
         try:
             r = requests.get(self.url, params={'query': query, 'format': 'json'}, headers=self.headers)
